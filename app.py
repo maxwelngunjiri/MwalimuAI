@@ -110,13 +110,10 @@ JSON SCHEMA TO FOLLOW:
 
 def clean_json_output(raw_text):
     text = raw_text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    if text.startswith("
-```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
+    # Safe string replacement that won't break markdown parsers
+    safe_marker = "`" * 3
+    text = text.replace(safe_marker + "json", "")
+    text = text.replace(safe_marker, "")
     return text.strip()
 
 # ==============================================================================
