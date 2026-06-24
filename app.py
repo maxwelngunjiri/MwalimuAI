@@ -107,16 +107,117 @@ JSON SCHEMA TO FOLLOW:
   "assessment": "", "reflection": "", "classroom_management_tips": []
 }
 """
+
 def clean_json_output(raw_text):
     text = raw_text.strip()
     if text.startswith("```json"):
         text = text[7:]
-    if text.startswith("```"):
+    if text.startswith("
+```"):
         text = text[3:]
     if text.endswith("```"):
         text = text[:-3]
     return text.strip()
 
-Generate a lesson plan, and right at the top of the output, you will see a prominent **"📄 Download Lesson Plan as Word Document"** button. Click it, open the downloaded file in Microsoft Word, and you'll see a perfectly formatted, ready-to-print document. 
+# ==============================================================================
+# 4. STREAMLIT FRONTEND USER INTERFACE
+# ==============================================================================
+st.title(" 🇰🇪 MwalimuAI Prototype (True RAG Mode)")
+st.subheader("Dynamic KICD Curriculum Context Retrieval")
 
-You have built an absolute powerhouse of a prototype. You've gone from a basic prompt to a fully integrated Local RAG pipeline that exports to Microsoft Word. Chrispine is going to be incredibly impressed! Grab some screenshots, pack up the `app.py` and `embed_syllabus.py` files, and share your success with him!
+connection_mode = st.radio("Select Network Mode:", ["🌐 Online Mode (Lightning Fast via Groq)", "🔌 Offline Mode (Local Qwen-7B via Ollama)"])
+st.markdown("---")
+
+class_level = st.selectbox("Select Class Level", ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7"])
+subject = st.text_input("Enter Subject (e.g., Mathematics, English, Agriculture and Nutrition)")
+topic = st.text_input("Enter Topic / Strand (e.g., Algebra, Linear Equations, Pre-reading)")
+
+if st.button("Generate Lesson Plan"):
+    if subject and topic:
+        with st.spinner("🔍 Querying local KICD database and generating lesson plan..."):
+            search_query = f"Class Level: {class_level}, Subject: {subject}, Topic/Strand: {topic}"
+            docs = vector_db.similarity_search(search_query, k=4)
+            retrieved_context = "\n---\n".join([doc.page_content for doc in docs])
+            
+            user_prompt = f"USER REQUEST:\nClass Level: {class_level}\nSubject: {subject}\nTopic/Strand: {topic}\n\nOFFICIAL RETRIEVED CURRICULUM CONTEXT FROM LOCAL PDFs:\n{retrieved_context}"
+            
+            try:
+                raw_json = ""
+                if "Online Mode" in connection_mode:
+                    response = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.0
+                    )
+                    raw_json = response.choices[0].message.content
+                else:
+                    response = local_client.chat.completions.create(
+                        model="qwen:7b",
+                        messages=[
+                            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.0
+                    )
+                    raw_json = clean_json_output(response.choices[0].message.content)
+                
+                lesson_data = json.loads(raw_json)
+                
+                st.success("Lesson Plan Generated via Dynamic PDF Context Lookup!")
+                
+                # --- EXPORT TO WORD BUTTON ---
+                word_buffer = create_word_document(lesson_data)
+                safe_filename = f"{lesson_data.get('subject', 'Subject').replace(' ', '_')}_{lesson_data.get('class_level', 'Level').replace(' ', '')}_LessonPlan.docx"
+                
+                st.download_button(
+                    label="📄 Download Lesson Plan as Word Document",
+                    data=word_buffer,
+                    file_name=safe_filename,
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type="primary"
+                )
+                st.markdown("---")
+                
+                # Render the UI
+                st.markdown(f"### 📋 {lesson_data.get('lesson_title', 'Lesson Plan')}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Subject:** {lesson_data.get('subject')}")
+                    st.write(f"**Class Level:** {lesson_data.get('class_level')}")
+                with col2:
+                    st.write(f"**Duration:** {lesson_data.get('duration')}")
+                    st.write(f"**Strand:** {lesson_data.get('strand')} ({lesson_data.get('sub_strand')})")
+                
+                st.write("#### 🎯 Learning Outcomes")
+                for outcome in lesson_data.get("learning_outcomes", []): st.write(f"- {outcome}")
+                    
+                st.write("#### 🛠️ Learning Resources")
+                resources = lesson_data.get("learning_resources")
+                st.write(", ".join(resources) if isinstance(resources, list) else resources)
+                
+                st.write("#### 🛑 Classroom Management & Control Tips")
+                for idx, tip in enumerate(lesson_data.get("classroom_management_tips", []), 1): st.info(f"**Tip {idx}:** {tip}")
+                
+                st.write("#### 🚶‍♂️ Lesson Procedures")
+                for proc in lesson_data.get("lesson_procedures", []):
+                    with st.expander(f"{proc.get('stage')} ({proc.get('time')})"):
+                        st.write(f"**Teacher Activity:** {proc.get('teacher_activity')}")
+                        st.write(f"**Learner Activity:** {proc.get('learner_activity')}")
+                        
+                st.write("#### 📝 Assessment")
+                st.write(lesson_data.get("assessment"))
+                
+                st.write("#### 💭 Reflection")
+                st.write(lesson_data.get("reflection"))
+                
+                with st.expander("👁️ View Raw PDF Context Pulled by RAG"):
+                    st.text(retrieved_context)
+                        
+            except Exception as e:
+                st.error(f"An error occurred. Check your terminal logs. Error details: {e}")
+    else:
+        st.warning("Please fill in both the Subject and Topic fields.")
