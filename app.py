@@ -107,13 +107,15 @@ JSON SCHEMA TO FOLLOW:
   "assessment": "", "reflection": "", "classroom_management_tips": []
 }
 """
-
 def clean_json_output(raw_text):
     text = raw_text.strip()
-    if text.startswith("
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
-http://googleusercontent.com/immersive_entry_chip/2
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
 
 Generate a lesson plan, and right at the top of the output, you will see a prominent **"📄 Download Lesson Plan as Word Document"** button. Click it, open the downloaded file in Microsoft Word, and you'll see a perfectly formatted, ready-to-print document. 
 
