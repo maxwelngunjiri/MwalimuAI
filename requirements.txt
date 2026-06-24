@@ -7,3 +7,4 @@ chromadb
 sentence-transformers
 pypdf
 python-docx
+protobuf<=3.20.3
